@@ -16,7 +16,28 @@ import (
 var (
 	outputDir  = flag.String("output_dir", "", `The path to the signature image if any. Default to "signature.png" in the same directory.`)
 	sigImgPath = flag.String("signature_image_path", "", `The path to the signature image if any. Default to "signature.png" in the same directory.`)
+	month      = flag.String("month", "", `Overriding the month for output`)
+	address    = flag.String("address", "723", `Overriding the month for output`)
 )
+
+type rentalInfo struct {
+	address string
+	tenants []string
+	rent    string
+}
+
+var addresses = map[string]rentalInfo{
+	"723": {
+		address: "723 Chesapeake Dr. Waterloo, ON, N2K 4G4",
+		tenants: []string{"Lindsay Demars", "Grady Meston"},
+		rent:    "$2,680.00",
+	},
+	"2": {
+		address: "2 Lesgay Crescent, North York, ON M2J 2H8",
+		tenants: []string{"Rafael Antonio Valencia-Magana", "Silvia Natalia Amado Garcia"},
+		rent:    "$3,700.00",
+	},
+}
 
 func main() {
 	flag.Parse()
@@ -47,6 +68,9 @@ func main() {
 }
 
 func validateFlags(outputDir string, sigImgPath string) error {
+	if _, ok := addresses[*address]; !ok {
+		return fmt.Errorf("No %q in %v", *address, addresses)
+	}
 	return nil
 }
 
@@ -56,17 +80,29 @@ func addTitle(pdf *gofpdf.Fpdf) {
 	dayStr := fmt.Sprintf("Date: %v", time.Now().Format("Jan 2, 2006"))
 
 	tn := time.Now().Local()
-	rentTimeStr := tn.AddDate(0, 1, -tn.Day()+1).Format("Jan, 2006")
+	var rentTimeStr string
+	if tn.Day() > 20 {
+		// Pay on month end.
+		rentTimeStr = tn.AddDate(0, 1, -tn.Day()+1).Format("Jan, 2006")
+	} else {
+		// Pay on month start.
+		rentTimeStr = tn.Format("Jan, 2006")
+	}
+
+	_ = rentTimeStr
+
+	rentalInfo := addresses[*address]
 
 	components := []string{
 		"<center><b>RECEIPT</b></center>",
 		dayStr + "<br>",
-		"Address of Rental Unit: 723 Chesapeake Dr. Waterloo, ON, N2K 4G4",
-		"Tenant(s):              Lindsay Demars, Grady Meston",
+		"Address of Rental Unit: " + rentalInfo.address,
+		"Tenant(s):              " + strings.Join(rentalInfo.tenants, ", "),
 		"Payment received for:   [x] Rent [ ] Rent Deposit [ ] Other",
 		"Payment Type:           [x] E-transfer [ ] Cheque [ ] Cash [ ] Other",
 		fmt.Sprintf("Notes: Rent for %v", rentTimeStr),
-		"Amount: $2650.00",
+		// fmt.Sprintf("Notes: Rent for Apr 8 - Apr 30, 2022 ($2836) and key deposit ($300) paid via bank draft"),
+		"Amount: " + rentalInfo.rent,
 		"Landlord's Name: Yizheng Ding",
 		"Landlord/Authorized Agent signature",
 	}
