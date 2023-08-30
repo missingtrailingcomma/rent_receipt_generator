@@ -30,12 +30,12 @@ var addresses = map[string]rentalInfo{
 	"723": {
 		address: "723 Chesapeake Dr. Waterloo, ON, N2K 4G4",
 		tenants: []string{"Lindsay Demars", "Grady Meston"},
-		rent:    "$2,680.00",
+		rent:    "$2,740.00",
 	},
 	"2": {
 		address: "2 Lesgay Crescent, North York, ON M2J 2H8",
 		tenants: []string{"Rafael Antonio Valencia-Magana", "Silvia Natalia Amado Garcia"},
-		rent:    "$3,700.00",
+		rent:    "$3,790.00",
 	},
 }
 
@@ -81,7 +81,7 @@ func addTitle(pdf *gofpdf.Fpdf) {
 
 	tn := time.Now().Local()
 	var rentTimeStr string
-	if tn.Day() > 20 {
+	if tn.Day() > 29 {
 		// Pay on month end.
 		rentTimeStr = tn.AddDate(0, 1, -tn.Day()+1).Format("Jan, 2006")
 	} else {
