@@ -14,10 +14,19 @@ import (
 )
 
 var (
-	outputDir  = flag.String("output_dir", "", `The path to the signature image if any. Default to "signature.png" in the same directory.`)
-	sigImgPath = flag.String("signature_image_path", "", `The path to the signature image if any. Default to "signature.png" in the same directory.`)
-	month      = flag.String("month", "", `Overriding the month for output`)
-	address    = flag.String("address", "723", `Overriding the month for output`)
+	address = flag.String("address", "723", `Overriding the month for output`)
+
+	paymentMethod     = flag.String("payment_method", "emt", `Payment method, options are: emt, cheque, bank_draft, cash. Default to emt.`)
+	paymentPurpose    = flag.String("payment_purpose", "rent", `The purpose of the payment, options are: rent, rent_deposit, key_deposit, other. Default to rent.`)
+	monthOverride     = flag.String("month", "", `Overriding the month for output`)
+	rentDepositMonths = flag.String("rent_deposit_months", "", `Format: "<first month> and <last month>". Must provide if payment_purpose == rent_deposit.`)
+	noteForOther      = flag.String("note_for_other", "", `Must provide if payment_purpose == other.`)
+	rentDepositAmount = flag.String("rent_deposit_amount", "", `Must provide if payment_purpose == rent_deposit.`)
+	keyDepositAmount  = flag.String("key_deposit_amount", "", `Must provide if payment_purpose == key_deposit.`)
+	otherAmount       = flag.String("other_amount", "", `Must provide if payment_purpose == other.`)
+
+	outputDir  = flag.String("output_dir", "~/Downloads", `The path where the pdf outputs. Default to ~/Downloads.`)
+	sigImgPath = flag.String("signature_image_path", "signature.png", `The path to the signature image if any. Default to "signature.png" in the same directory.`)
 )
 
 type rentalInfo struct {
@@ -34,8 +43,8 @@ var addresses = map[string]rentalInfo{
 	},
 	"2": {
 		address: "2 Lesgay Crescent, North York, ON M2J 2H8",
-		tenants: []string{"Rafael Antonio Valencia-Magana", "Silvia Natalia Amado Garcia"},
-		rent:    "$3,790.00",
+		tenants: []string{"Mei Lam Ho", "On Lai Chan", "Wai Yin Poon", "Hoi Hin Mo"},
+		rent:    "$4,300.00",
 	},
 }
 
@@ -50,7 +59,7 @@ func main() {
 	pdf.AddPage()
 
 	log.Printf(`Adding title...`)
-	addTitle(pdf)
+	addContent(pdf)
 	log.Printf(`Adding signature...`)
 	addSignature(pdf, *sigImgPath)
 
@@ -58,7 +67,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("expandPath(%q): %v", *outputDir, err)
 	}
-	filename := path.Join(od, fmt.Sprintf("rent_receipt.pdf"))
+	filename := path.Join(od, "receipt.pdf")
 
 	log.Printf(`Creating file %q...`, filename)
 	if err := pdf.OutputFileAndClose(filename); err != nil {
@@ -69,42 +78,49 @@ func main() {
 
 func validateFlags(outputDir string, sigImgPath string) error {
 	if _, ok := addresses[*address]; !ok {
-		return fmt.Errorf("No %q in %v", *address, addresses)
+		return fmt.Errorf("no %q in %v", *address, addresses)
 	}
+
+	if *paymentPurpose == "rent_deposit" && *rentDepositMonths == "" {
+		return fmt.Errorf("-rent_deposit_months must be provided when payment_purpose == rent_deposit")
+	}
+
+	if *paymentPurpose == "other" && *noteForOther == "" {
+		return fmt.Errorf("-note_for_other must be provided when payment_purpose == other")
+	}
+
+	if *paymentPurpose == "rent_deposit" && *rentDepositAmount == "" {
+		return fmt.Errorf("-rent_deposit_amount must be provided when payment_purpose == rent_deposit")
+	}
+
+	if *paymentPurpose == "key_deposit" && *keyDepositAmount == "" {
+		return fmt.Errorf("-key_deposit_amount must be provided when payment_purpose == key_deposit")
+	}
+
+	if *paymentPurpose == "other" && *otherAmount == "" {
+		return fmt.Errorf("-other_amount must be provided when payment_purpose == rent_deposit")
+	}
+
 	return nil
 }
 
-func addTitle(pdf *gofpdf.Fpdf) {
+func addContent(pdf *gofpdf.Fpdf) {
 	pdf.SetFont("Courier", "", 12)
 
 	dayStr := fmt.Sprintf("Date: %v", time.Now().Format("Jan 2, 2006"))
-
-	tn := time.Now().Local()
-	var rentTimeStr string
-	if tn.Day() > 29 {
-		// Pay on month end.
-		rentTimeStr = tn.AddDate(0, 1, -tn.Day()+1).Format("Jan, 2006")
-	} else {
-		// Pay on month start.
-		rentTimeStr = tn.Format("Jan, 2006")
-	}
-
-	_ = rentTimeStr
-
 	rentalInfo := addresses[*address]
 
 	components := []string{
 		"<center><b>RECEIPT</b></center>",
 		dayStr + "<br>",
-		"Address of Rental Unit: " + rentalInfo.address,
-		"Tenant(s):              " + strings.Join(rentalInfo.tenants, ", "),
-		"Payment received for:   [x] Rent [ ] Rent Deposit [ ] Other",
-		"Payment Type:           [x] E-transfer [ ] Cheque [ ] Cash [ ] Other",
-		fmt.Sprintf("Notes: Rent for %v", rentTimeStr),
-		// fmt.Sprintf("Notes: Rent for Apr 8 - Apr 30, 2022 ($2836) and key deposit ($300) paid via bank draft"),
-		"Amount: " + rentalInfo.rent,
-		"Landlord's Name: Yizheng Ding",
-		"Landlord/Authorized Agent signature",
+		"Address:      " + rentalInfo.address,
+		"Tenant(s):    " + strings.Join(rentalInfo.tenants, ", "),
+		"Payment For:  " + paymentPurposeStr(*paymentPurpose),
+		"Pyament Note: " + noteStr(*paymentPurpose),
+		"Payment Type: " + paymentMethodStr(*paymentMethod),
+		"Amount:       " + amountStr(*paymentPurpose, rentalInfo.rent),
+		"Landlord:     Yizheng Ding",
+		"Signature:",
 	}
 
 	_, lineHt := pdf.GetFontSize()
@@ -114,8 +130,88 @@ func addTitle(pdf *gofpdf.Fpdf) {
 	html.Write(lineHt, htmlStr)
 }
 
+func paymentPurposeStr(paymentPurpose string) string {
+	forRent := " "
+	forRentDeposit := " "
+	forKeyDeposit := " "
+	forOther := " "
+	switch paymentPurpose {
+	case "rent":
+		forRent = "x"
+	case "rent_deposit":
+		forRentDeposit = "x"
+	case "key_deposit":
+		forKeyDeposit = "x"
+	case "other":
+		forOther = "x"
+	}
+	return fmt.Sprintf("[%s] Rent [%s] Rent Deposit [%s] Key Deposit [%s] Other", forRent, forRentDeposit, forKeyDeposit, forOther)
+}
+
+func noteStr(paymentPurpose string) string {
+	tn := time.Now().Local()
+
+	switch paymentPurpose {
+	case "rent":
+		var rentTimeStr string
+		if *monthOverride != "" {
+			rentTimeStr = *monthOverride + ", " + tn.Format("2006")
+		} else {
+			if tn.Day() > 29 {
+				// Pay on month end.
+				rentTimeStr = tn.AddDate(0, 1, -tn.Day()+1).Format("Jan, 2006")
+			} else {
+				// Pay on month start.
+				rentTimeStr = tn.Format("Jan, 2006")
+			}
+		}
+		return "Rent for " + rentTimeStr
+	case "rent_deposit":
+		return "Rent for " + *rentDepositMonths
+	case "key_deposit":
+		return "Key deposit"
+	case "other":
+		return *noteForOther
+	default:
+		return "N/A"
+	}
+}
+
+func paymentMethodStr(paymentMethod string) string {
+	useEmt := " "
+	useCheque := " "
+	useBankDraft := " "
+	useCash := " "
+	switch paymentMethod {
+	case "emt":
+		useEmt = "x"
+	case "cheque":
+		useCheque = "x"
+	case "bank_draft":
+		useBankDraft = "x"
+	case "cash":
+		useCash = "x"
+	}
+	return fmt.Sprintf("[%s] E-transfer [%s] Cheque [%s] Bank Draft [%s] Cash [ ] Other", useEmt, useCheque, useBankDraft, useCash)
+}
+
+func amountStr(paymentPurpose, rent string) string {
+	switch paymentPurpose {
+	case "rent":
+		return rent
+	case "rent_deposit":
+		return *rentDepositAmount
+	case "key_deposit":
+		return *keyDepositAmount
+	case "other":
+		return *otherAmount
+	default:
+		return ""
+	}
+}
+
 func addSignature(pdf *gofpdf.Fpdf, sigImgPath string) {
-	pdf.Image(sigImgPath, 100, pdf.GetY()-6, 40, 20, false, "", 0, "")
+	pdf.Image(sigImgPath, 42, pdf.GetY()-6, 40, 20, false, "", 0, "")
 }
 
 func expandPath(path string) (string, error) {
