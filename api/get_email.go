@@ -102,6 +102,7 @@ func generateEmailPDF(ctx context.Context) error {
 	if err != nil {
 		log.Fatal(err)
 	}
+	return nil
 }
 
 // Retrieve a token, saves the token, then returns the generated client.

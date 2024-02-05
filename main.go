@@ -17,13 +17,13 @@ var (
 	address = flag.String("address", "723", `Overriding the month for output`)
 
 	paymentMethod     = flag.String("payment_method", "emt", `Payment method, options are: emt, cheque, bank_draft, cash. Default to emt.`)
-	paymentPurpose    = flag.String("payment_purpose", "rent", `The purpose of the payment, options are: rent, rent_deposit, key_deposit, other. Default to rent.`)
-	monthOverride     = flag.String("month", "", `Overriding the month for output`)
+	paymentPurpose    = flag.String("payment_purpose", "rent", `The purpose of the payment, options are: rent, rent_deposit, key_deposit, utility, other. Default to rent.`)
 	rentDepositMonths = flag.String("rent_deposit_months", "", `Format: "<first month> and <last month>". Must provide if payment_purpose == rent_deposit.`)
-	noteForOther      = flag.String("note_for_other", "", `Must provide if payment_purpose == other.`)
-	rentDepositAmount = flag.String("rent_deposit_amount", "", `Must provide if payment_purpose == rent_deposit.`)
-	keyDepositAmount  = flag.String("key_deposit_amount", "", `Must provide if payment_purpose == key_deposit.`)
-	otherAmount       = flag.String("other_amount", "", `Must provide if payment_purpose == other.`)
+	note              = flag.String("note", "", `Must provide if payment_purpose == utility or other.`)
+	paymentAmount     = flag.String("payment_amount", "", `Must provide if payment_purpose != rent.`)
+
+	monthOverride   = flag.String("month", "", `Overriding the month for output`)
+	tenantsOverride = flag.String("tenants", "", `Overriding the tenants for output`)
 
 	outputDir  = flag.String("output_dir", "~/Downloads", `The path where the pdf outputs. Default to ~/Downloads.`)
 	sigImgPath = flag.String("signature_image_path", "signature.png", `The path to the signature image if any. Default to "signature.png" in the same directory.`)
@@ -85,20 +85,12 @@ func validateFlags(outputDir string, sigImgPath string) error {
 		return fmt.Errorf("-rent_deposit_months must be provided when payment_purpose == rent_deposit")
 	}
 
-	if *paymentPurpose == "other" && *noteForOther == "" {
-		return fmt.Errorf("-note_for_other must be provided when payment_purpose == other")
+	if (*paymentPurpose == "utility" || *paymentPurpose == "other") && *note == "" {
+		return fmt.Errorf("-note must be provided when payment_purpose == other or utility")
 	}
 
-	if *paymentPurpose == "rent_deposit" && *rentDepositAmount == "" {
-		return fmt.Errorf("-rent_deposit_amount must be provided when payment_purpose == rent_deposit")
-	}
-
-	if *paymentPurpose == "key_deposit" && *keyDepositAmount == "" {
-		return fmt.Errorf("-key_deposit_amount must be provided when payment_purpose == key_deposit")
-	}
-
-	if *paymentPurpose == "other" && *otherAmount == "" {
-		return fmt.Errorf("-other_amount must be provided when payment_purpose == rent_deposit")
+	if *paymentPurpose != "rent" && *paymentAmount == "" {
+		return fmt.Errorf("-payment_amount must be provided when payment_purpose != rent")
 	}
 
 	return nil
@@ -110,11 +102,16 @@ func addContent(pdf *gofpdf.Fpdf) {
 	dayStr := fmt.Sprintf("Date: %v", time.Now().Format("Jan 2, 2006"))
 	rentalInfo := addresses[*address]
 
+	tenants := rentalInfo.tenants
+	if *tenantsOverride != "" {
+		tenants = strings.Split(*tenantsOverride, ",")
+	}
+
 	components := []string{
 		"<center><b>RECEIPT</b></center>",
 		dayStr + "<br>",
 		"Address:      " + rentalInfo.address,
-		"Tenant(s):    " + strings.Join(rentalInfo.tenants, ", "),
+		"Tenant(s):    " + strings.Join(tenants, ", "),
 		"Payment For:  " + paymentPurposeStr(*paymentPurpose),
 		"Pyament Note: " + noteStr(*paymentPurpose),
 		"Payment Type: " + paymentMethodStr(*paymentMethod),
@@ -134,6 +131,7 @@ func paymentPurposeStr(paymentPurpose string) string {
 	forRent := " "
 	forRentDeposit := " "
 	forKeyDeposit := " "
+	forUtility := ""
 	forOther := " "
 	switch paymentPurpose {
 	case "rent":
@@ -142,10 +140,12 @@ func paymentPurposeStr(paymentPurpose string) string {
 		forRentDeposit = "x"
 	case "key_deposit":
 		forKeyDeposit = "x"
+	case "utility":
+		forUtility = "x"
 	case "other":
 		forOther = "x"
 	}
-	return fmt.Sprintf("[%s] Rent [%s] Rent Deposit [%s] Key Deposit [%s] Other", forRent, forRentDeposit, forKeyDeposit, forOther)
+	return fmt.Sprintf("[%s] Rent [%s] Rent Deposit [%s] Key Deposit [%s] Utility<br>              [%s] Other", forRent, forRentDeposit, forKeyDeposit, forUtility, forOther)
 }
 
 func noteStr(paymentPurpose string) string {
@@ -157,7 +157,7 @@ func noteStr(paymentPurpose string) string {
 		if *monthOverride != "" {
 			rentTimeStr = *monthOverride + ", " + tn.Format("2006")
 		} else {
-			if tn.Day() > 29 {
+			if tn.Day() >= 25 {
 				// Pay on month end.
 				rentTimeStr = tn.AddDate(0, 1, -tn.Day()+1).Format("Jan, 2006")
 			} else {
@@ -170,8 +170,8 @@ func noteStr(paymentPurpose string) string {
 		return "Rent for " + *rentDepositMonths
 	case "key_deposit":
 		return "Key deposit"
-	case "other":
-		return *noteForOther
+	case "utility", "other":
+		return *note
 	default:
 		return "N/A"
 	}
@@ -199,14 +199,8 @@ func amountStr(paymentPurpose, rent string) string {
 	switch paymentPurpose {
 	case "rent":
 		return rent
-	case "rent_deposit":
-		return *rentDepositAmount
-	case "key_deposit":
-		return *keyDepositAmount
-	case "other":
-		return *otherAmount
 	default:
-		return ""
+		return *paymentAmount
 	}
 }
 
