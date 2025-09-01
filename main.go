@@ -38,13 +38,8 @@ type rentalInfo struct {
 var addresses = map[string]rentalInfo{
 	"723": {
 		address: "723 Chesapeake Dr. Waterloo, ON, N2K 4G4",
-		tenants: []string{"Lindsay Demars", "Grady Meston"},
-		rent:    "$2,740.00",
-	},
-	"2": {
-		address: "2 Lesgay Crescent, North York, ON M2J 2H8",
-		tenants: []string{"Mei Lam Ho", "On Lai Chan", "Wai Yin Poon", "Hoi Hin Mo"},
-		rent:    "$4,300.00",
+		tenants: []string{"Xiang Chen", "Yiwen Dong", "Guoshuai Shi", "Wenhan Zhu", "Zhifeng Yao"},
+		rent:    "$3,200",
 	},
 }
 
@@ -157,7 +152,7 @@ func noteStr(paymentPurpose string) string {
 		if *monthOverride != "" {
 			rentTimeStr = *monthOverride + ", " + tn.Format("2006")
 		} else {
-			if tn.Day() >= 25 {
+			if tn.Day() >= 24 {
 				// Pay on month end.
 				rentTimeStr = tn.AddDate(0, 1, -tn.Day()+1).Format("Jan, 2006")
 			} else {
